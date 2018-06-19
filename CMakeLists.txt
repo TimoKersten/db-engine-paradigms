@@ -7,8 +7,8 @@ else()
 endif()
 
 if(LINUX)
-set(CMAKE_C_COMPILER icc)
-set(CMAKE_CXX_COMPILER icc)
+set(CMAKE_C_COMPILER gcc)
+set(CMAKE_CXX_COMPILER g++)
 ADD_DEFINITIONS(-D_LIBCPP_VERSION=1) # tbb clang compatibility
 else()
 set(CMAKE_C_COMPILER gcc)
@@ -28,13 +28,13 @@ OPTION(HASH_SIZE_32 OFF)
 
 
 # Compiler flags for the different targets
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -mtune=native -std=c++14 -fPIC -Wall -Wextra -fno-omit-frame-pointer -Wno-unknown-pragmas ")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -mtune=native -std=c++14 -fPIC -Wall -Wextra -Wno-psabi -fno-omit-frame-pointer -Wno-unknown-pragmas ")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -Wall -Wextra -fno-omit-frame-pointer -march=native -fdiagnostics-color ")
 
 
 if(LINUX)
-  # set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address -static-libasan")
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ")
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address -static-libasan")
+  # set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ")
 else()
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -fsanitize=address")
   # set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ")
@@ -192,6 +192,15 @@ target_include_directories(bench PUBLIC
     PRIVATE src)
 target_link_libraries(bench hyper vectorwise common)
 
+
+add_library(benchmark_config
+  src/benchmarks/config.cpp)
+target_include_directories(benchmark_config PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+    PRIVATE src)
+target_link_libraries(benchmark_config vectorwise common)
+
 file(GLOB TPCHQUERIES src/benchmarks/tpch/queries/*.cpp)
 add_library(tpch
   ${TPCHQUERIES}
@@ -200,7 +209,7 @@ target_include_directories(tpch PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
     PRIVATE src)
-target_link_libraries(tpch pthread hyper ${TBB_LIBRARIES} vectorwise common)
+target_link_libraries(tpch benchmark_config pthread hyper ${TBB_LIBRARIES} vectorwise common)
 
 add_executable(run_tpch
   ${HYPER_TRANSLATORS}
@@ -212,6 +221,25 @@ target_include_directories(run_tpch PUBLIC
     PRIVATE src)
 target_link_libraries(run_tpch tpch hyper vectorwise common ${JEVENTSLIB})
 
+file(GLOB SBBQUERIES src/benchmarks/sbb/queries/*.cpp)
+add_library(ssb
+  ${SBBQUERIES}
+  )
+target_include_directories(ssb PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+    PRIVATE src)
+target_link_libraries(ssb benchmark_config pthread hyper ${TBB_LIBRARIES} vectorwise common)
+
+add_executable(run_ssb
+  ${HYPER_TRANSLATORS}
+  src/benchmarks/sbb/run.cpp
+  )
+target_include_directories(run_ssb PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+    PRIVATE src)
+target_link_libraries(run_ssb ssb hyper vectorwise common ${JEVENTSLIB})
 
 add_executable(run_prim
   src/benchmarks/primitives/run.cpp
@@ -228,7 +256,9 @@ set(CTEST_OUTPUT_ON_FAILURE "1")
 
 add_executable(test_all
   src/test/tpch_expected.cpp
+  src/test/ssb_expected.cpp
   src/test/tpch.cpp
+  src/test/ssb.cpp
   src/test/vectorwise/primitives.cpp
   src/test/vectorwise/Operators.cpp
   src/test/common/Hashmap.cpp
@@ -237,7 +267,7 @@ add_executable(test_all
   src/test/common/Mmap.cpp
   src/test/common/runtime/Stack.cpp
   )
-target_link_libraries(test_all common hyper vectorwise tpch gtest gtest_main)
+target_link_libraries(test_all common hyper vectorwise tpch ssb gtest gtest_main)
 
 if(HARDWARE_BENCHMARKS)
   add_executable(latency

@@ -11,11 +11,22 @@ using namespace std;
 enum RTType {
    Integer,
    Numeric_12_2,
+   Numeric_18_2,
    Date,
    Char_1,
+   Char_6,
+   Char_7,
+   Char_9,
    Char_10,
+   Char_11,
+   Char_12,
    Char_15,
+   Char_18,
+   Char_22,
    Char_25,
+   Varchar_11,
+   Varchar_12,
+   Varchar_22,
    Varchar_23,
    Varchar_25,
    Varchar_40,
@@ -31,20 +42,31 @@ RTType algebraToRTType(algebra::Type* t) {
    if (dynamic_cast<algebra::Integer*>(t)) {
       return RTType::Integer;
    } else if (auto e = dynamic_cast<algebra::Numeric*>(t)) {
-      if (e->size == 12 and e->precision == 2)
-         return Numeric_12_2;
+      if (e->size == 12 and e->precision == 2) return Numeric_12_2;
+      if (e->size == 18 and e->precision == 2)
+         return Numeric_18_2;
       else
          throw runtime_error("Unknown Numeric precision");
    } else if (auto e = dynamic_cast<algebra::Char*>(t)) {
       switch (e->size) {
       case 1: return Char_1;
+      case 6: return Char_6;
+      case 7: return Char_7;
+      case 9: return Char_9;
       case 10: return Char_10;
+      case 11: return Char_11;
+      case 12: return Char_12;
       case 15: return Char_15;
+      case 18: return Char_18;
+      case 22: return Char_22;
       case 25: return Char_25;
       default: throw runtime_error("Unknown Char size");
       }
    } else if (auto e = dynamic_cast<algebra::Varchar*>(t)) {
       switch (e->size) {
+      case 11: return Varchar_11;
+      case 12: return Varchar_12;
+      case 22: return Varchar_22;
       case 23: return Varchar_23;
       case 25: return Varchar_25;
       case 40: return Varchar_40;
@@ -82,11 +104,22 @@ struct ColumnConfig {
 #define EACHTYPE                                                               \
    case Integer: D(types::Integer)                                             \
    case Numeric_12_2: D(types::Numeric<12 COMMA 2>)                            \
+   case Numeric_18_2: D(types::Numeric<18 COMMA 2>)                            \
    case Date: D(types::Date)                                                   \
    case Char_1: D(types::Char<1>)                                              \
+   case Char_6: D(types::Char<6>)                                              \
+   case Char_7: D(types::Char<7>)                                              \
+   case Char_9: D(types::Char<9>)                                              \
    case Char_10: D(types::Char<10>)                                            \
+   case Char_11: D(types::Char<11>)                                            \
+   case Char_12: D(types::Char<12>)                                            \
    case Char_15: D(types::Char<15>)                                            \
+   case Char_18: D(types::Char<18>)                                            \
+   case Char_22: D(types::Char<22>)                                            \
    case Char_25: D(types::Char<25>)                                            \
+   case Varchar_11: D(types::Varchar<11>)                                      \
+   case Varchar_12: D(types::Varchar<12>)                                      \
+   case Varchar_22: D(types::Varchar<22>)                                      \
    case Varchar_23: D(types::Varchar<23>)                                      \
    case Varchar_25: D(types::Varchar<25>)                                      \
    case Varchar_40: D(types::Varchar<40>)                                      \
@@ -157,10 +190,10 @@ void parseColumns(runtime::Relation& r, std::vector<ColumnConfigOwning>& cols,
    bool allColumnsMMaped = true;
    string cachedir = dir + "/cached/";
    if (!mkdir((dir + "/cached/").c_str(), 0777))
-     throw runtime_error("Could not create dir 'cached'.");
+      throw runtime_error("Could not create dir 'cached': " + dir + "/cached/");
    for (auto& col : colsC)
-     if (!std::ifstream(cachedir + fileName + "_" + col.name))
-       allColumnsMMaped = false;
+      if (!std::ifstream(cachedir + fileName + "_" + col.name))
+         allColumnsMMaped = false;
 
    if (!allColumnsMMaped) {
       std::vector<std::vector<void*>> attributes;
@@ -332,6 +365,106 @@ void importTPCH(std::string dir, Database& db) {
                    {"r_name", make_unique<algebra::Char>(25)},
                    {"r_comment", make_unique<algebra::Varchar>(152)}});
       parseColumns(rel, columns, dir, "region");
+   }
+}
+
+void importSSB(std::string dir, Database& db) {
+
+   //--------------------------------------------------------------------------------
+   // lineorder
+   {
+      auto& rel = db["lineorder"];
+      rel.name = "lineorder";
+      auto columns =
+          configX({{"lo_orderkey", make_unique<algebra::Integer>()},
+                   {"lo_linenumber", make_unique<algebra::Integer>()},
+                   {"lo_custkey", make_unique<algebra::Integer>()},
+                   {"lo_partkey", make_unique<algebra::Integer>()},
+                   {"lo_suppkey", make_unique<algebra::Integer>()},
+                   {"lo_orderdate", make_unique<algebra::Integer>()},
+                   {"lo_orderpriority", make_unique<algebra::Char>(15)},
+                   {"lo_shippriority", make_unique<algebra::Char>(1)},
+                   {"lo_quantity", make_unique<algebra::Integer>()},
+                   {"lo_extendedprice", make_unique<algebra::Numeric>(18, 2)},
+                   {"lo_ordtotalprice", make_unique<algebra::Numeric>(18, 2)},
+                   {"lo_discount", make_unique<algebra::Numeric>(18, 2)},
+                   {"lo_revenue", make_unique<algebra::Numeric>(18, 2)},
+                   {"lo_supplycost", make_unique<algebra::Numeric>(18, 2)},
+                   {"lo_tax", make_unique<algebra::Integer>()},
+                   {"lo_commitdate", make_unique<algebra::Integer>()},
+                   {"lo_shopmode", make_unique<algebra::Char>(10)}});
+      parseColumns(rel, columns, dir, rel.name);
+   }
+   //--------------------------------------------------------------------------------
+   // part
+   {
+      auto& rel = db["part"];
+      rel.name = "part";
+      auto columns = configX({{"p_partkey", make_unique<algebra::Integer>()},
+                              {"p_name", make_unique<algebra::Varchar>(22)},
+                              {"p_mfgr", make_unique<algebra::Char>(6)},
+                              {"p_category", make_unique<algebra::Char>(7)},
+                              {"p_brand1", make_unique<algebra::Char>(9)},
+                              {"p_color", make_unique<algebra::Varchar>(11)},
+                              {"p_type", make_unique<algebra::Varchar>(25)},
+                              {"p_size", make_unique<algebra::Integer>()},
+                              {"p_container", make_unique<algebra::Char>(10)}});
+      parseColumns(rel, columns, dir, rel.name);
+   }
+   //--------------------------------------------------------------------------------
+   // supplier
+   {
+      auto& rel = db["supplier"];
+      rel.name = "supplier";
+      auto columns = configX({{"s_suppkey", make_unique<algebra::Integer>()},
+                              {"s_name", make_unique<algebra::Char>(25)},
+                              {"s_address", make_unique<algebra::Varchar>(25)},
+                              {"s_city", make_unique<algebra::Char>(10)},
+                              {"s_nation", make_unique<algebra::Char>(15)},
+                              {"s_region", make_unique<algebra::Char>(12)},
+                              {"s_phone", make_unique<algebra::Char>(15)}});
+      parseColumns(rel, columns, dir, rel.name);
+   }
+   //--------------------------------------------------------------------------------
+   // customer
+   {
+      auto& rel = db["customer"];
+      rel.name = "customer";
+      auto columns =
+          configX({{"c_custkey", make_unique<algebra::Integer>()},
+                   {"c_name", make_unique<algebra::Varchar>(25)},
+                   {"c_address", make_unique<algebra::Varchar>(25)},
+                   {"c_city", make_unique<algebra::Char>(10)},
+                   {"c_nation", make_unique<algebra::Char>(15)},
+                   {"c_region", make_unique<algebra::Char>(12)},
+                   {"c_phone", make_unique<algebra::Char>(15)},
+                   {"c_mktsegment", make_unique<algebra::Char>(10)}});
+      parseColumns(rel, columns, dir, rel.name);
+   }
+   //--------------------------------------------------------------------------------
+   // date
+   {
+      auto& rel = db["date"];
+      rel.name = "date";
+      auto columns =
+          configX({{"d_datekey", make_unique<algebra::Integer>()},
+                   {"d_date", make_unique<algebra::Char>(18)},
+                   {"d_dayofweek", make_unique<algebra::Char>(9)},
+                   {"d_month", make_unique<algebra::Char>(9)},
+                   {"d_year", make_unique<algebra::Integer>()},
+                   {"d_yearmonthnum", make_unique<algebra::Integer>()},
+                   {"d_yearmonth", make_unique<algebra::Char>(7)},
+                   {"d_daynuminweek", make_unique<algebra::Integer>()},
+                   {"d_daynuminmonth", make_unique<algebra::Integer>()},
+                   {"d_daynuminyear", make_unique<algebra::Integer>()},
+                   {"d_monthnuminyear", make_unique<algebra::Integer>()},
+                   {"d_weeknuminyear", make_unique<algebra::Integer>()},
+                   {"d_sellingseasin", make_unique<algebra::Varchar>(12)},
+                   {"d_lastdayinweekfl", make_unique<algebra::Integer>()},
+                   {"d_lastdayinmonthfl", make_unique<algebra::Integer>()},
+                   {"d_holidayfl", make_unique<algebra::Integer>()},
+                   {"d_weekdayfl", make_unique<algebra::Integer>()}});
+      parseColumns(rel, columns, dir, rel.name);
    }
 }
 } // namespace runtime

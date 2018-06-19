@@ -11,13 +11,13 @@ namespace vectorwise {
 class QueryBuilder {
  public:
    runtime::GlobalPool* previous;
+
  protected:
    std::stack<std::unique_ptr<Operator>> operatorStack;
    runtime::Database& db;
    SharedStateManager& operatorState;
    VectorAllocator vecs;
    std::unordered_map<size_t, std::pair<size_t, void*>> buffers;
-
 
    struct DataStorage
    /// handle for data sources, e.g. base table columns or cache buffers
@@ -77,7 +77,9 @@ class QueryBuilder {
                        primitives::FGather gather);
       B& addBuildValue(DS source, DS sel, primitives::FScatterSel scatter,
                        DS target, primitives::FGather gather);
-      B& setProbeSelVector(DS vec, pos_t (Hashjoin::*join)() = &Hashjoin::joinSelParallel);
+      B&
+      setProbeSelVector(DS vec,
+                        pos_t (Hashjoin::*join)() = &Hashjoin::joinSelParallel);
       B& pushProbeSelVector(DS sel, DS target);
    };
 
@@ -152,10 +154,16 @@ class QueryBuilder {
 
    ResultBuilder Result();
    ScanBuilder Scan(std::string relation);
+   template <typename PAYLOAD>
+   void Debug(std::function<void(size_t, PAYLOAD&)> step,
+              std::function<void(PAYLOAD&)> finish);
+   void DebugCounter(std::string message);
    void Select(std::unique_ptr<Expression>&& exp);
    ProjectionBuilder Project();
    void FixedAggregation(std::unique_ptr<Aggregates>&& aggrs);
-   HashJoinBuilder HashJoin(DS probeMatches, pos_t(Hashjoin::*join)() = &Hashjoin::joinAllParallel);
+   HashJoinBuilder
+   HashJoin(DS probeMatches,
+            pos_t (Hashjoin::*join)() = &Hashjoin::joinAllParallel);
    HashGroupBuilder HashGroup();
 
    ~QueryBuilder();
@@ -170,4 +178,15 @@ class QueryBuilder {
    void pushOperator(std::unique_ptr<Operator>&& op);
    std::unique_ptr<Operator> popOperator();
 };
+
+template <typename PAYLOAD>
+void QueryBuilder::Debug(std::function<void(size_t, PAYLOAD&)> step,
+                         std::function<void(PAYLOAD&)> finish) {
+
+   auto& shared = operatorState.get<typename DebugOperator<PAYLOAD>::Shared>(nextOpNr());
+   auto debug = std::make_unique<DebugOperator<PAYLOAD>>(
+       shared, std::move(step), std::move(finish));
+   debug->child = popOperator();
+   pushOperator(std::move(debug));
 }
+} // namespace vectorwise

@@ -7,7 +7,7 @@ struct Attribute {
    const char* ptr = nullptr;
    int64_t len;
 };
-bool getattribute(std::string& line, Attribute& attr) {
+static bool getattribute(std::string& line, Attribute& attr) {
    attr.ptr += attr.len + 1;
    auto pos = attr.ptr - line.data();
    auto separatorPos = line.find_first_of(",", pos);

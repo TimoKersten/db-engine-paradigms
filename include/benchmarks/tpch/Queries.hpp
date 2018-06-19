@@ -1,36 +1,14 @@
 #pragma once
+
+#include <memory>
+
+#include "benchmarks/Config.hpp"
 #include "common/runtime/Concurrency.hpp"
 #include "common/runtime/Database.hpp"
 #include "common/runtime/Types.hpp"
 #include "vectorwise/Operators.hpp"
 #include "vectorwise/Query.hpp"
 #include "vectorwise/QueryBuilder.hpp"
-#include <memory>
-
-struct ExperimentConfig{
-  typedef vectorwise::pos_t (vectorwise::Hashjoin::*joinFun)();
-  bool useSimdJoin = false;
-  bool useSimdHash = false;
-  bool useSimdSel = false;
-  bool useSimdProj = false;
-  vectorwise::primitives::F2 hash_int32_t_col();
-  vectorwise::primitives::F3 hash_sel_int32_t_col();
-  vectorwise::primitives::F2 rehash_int32_t_col();
-  vectorwise::primitives::F3 rehash_sel_int32_t_col();
-  vectorwise::primitives::F4 proj_sel_minus_int64_t_val_int64_t_col();
-  vectorwise::primitives::F4 proj_sel_plus_int64_t_col_int64_t_val();
-  vectorwise::primitives::F3 proj_multiplies_int64_t_col_int64_t_col();
-  vectorwise::primitives::F4 proj_multiplies_sel_int64_t_col_int64_t_col();
-  vectorwise::primitives::F3 sel_less_int32_t_col_int32_t_val();
-  vectorwise::primitives::F4 selsel_greater_equal_int32_t_col_int32_t_val();
-  vectorwise::primitives::F4 selsel_less_int64_t_col_int64_t_val();
-  vectorwise::primitives::F4 selsel_greater_equal_int64_t_col_int64_t_val();
-  vectorwise::primitives::F4 selsel_less_equal_int64_t_col_int64_t_val();
-  joinFun joinAll();
-  joinFun joinSel();
-};
-
-extern ExperimentConfig conf;
 
 struct Q1Builder : public Query, private vectorwise::QueryBuilder {
    enum {
@@ -213,18 +191,18 @@ struct Q9Builder : public Query, private vectorwise::QueryBuilder {
       std::unique_ptr<vectorwise::Operator> rootOp;
    };
    Q9Builder(runtime::Database& db, vectorwise::SharedStateManager& shared,
-              size_t size = 1024)
+             size_t size = 1024)
        : QueryBuilder(db, shared, size) {}
    std::unique_ptr<Q9> getQuery();
 };
 
 std::unique_ptr<runtime::Query>
 q9_hyper(runtime::Database& db,
-          size_t nrThreads = std::thread::hardware_concurrency());
+         size_t nrThreads = std::thread::hardware_concurrency());
 std::unique_ptr<runtime::Query>
 q9_vectorwise(runtime::Database& db,
-               size_t nrThreads = std::thread::hardware_concurrency(),
-               size_t vectorSize = 1024);
+              size_t nrThreads = std::thread::hardware_concurrency(),
+              size_t vectorSize = 1024);
 
 struct Q18Builder : public Query, private vectorwise::QueryBuilder {
    enum {
@@ -271,5 +249,5 @@ q18_vectorwise(runtime::Database& db,
                size_t vectorSize = 1024);
 std::unique_ptr<runtime::Query>
 q18group_vectorwise(runtime::Database& db,
-               size_t nrThreads = std::thread::hardware_concurrency(),
-               size_t vectorSize = 1024);
+                    size_t nrThreads = std::thread::hardware_concurrency(),
+                    size_t vectorSize = 1024);

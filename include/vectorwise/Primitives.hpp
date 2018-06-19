@@ -26,6 +26,22 @@ pos_t sel_col_val(pos_t n, pos_t* RES result, T* RES param1, T* RES param2)
 }
 
 template <typename T, template <typename> class Op>
+pos_t sel_col_val_or_val(pos_t n, pos_t* RES result, T* RES param1,
+                         T* RES param2, T* RES param3)
+/// select with column and two possible constants
+{
+   const auto& con1 = *param2;
+   const auto& con2 = *param3;
+   auto rStart = result;
+   for (uint64_t i = 0; i < n; ++i) {
+     bool decision = Op<T>()(param1[i], con1) | Op<T>()(param1[i], con2);
+     *result = i;
+     result += decision;
+   }
+   return result - rStart;
+}
+
+template <typename T, template <typename> class Op>
 pos_t sel_col_col(pos_t n, pos_t* RES result, T* RES param1, T* RES param2)
 /// select two columns
 {
@@ -120,6 +136,7 @@ pos_t selsel_col_col_bf(pos_t n, pos_t* RES inSel, pos_t* RES result,
    }
    return result - rStart;
 }
+
 //------------------------------------------------------------------------------
 //--- projection templates
 template <typename T, template <typename> class Op>
@@ -227,10 +244,8 @@ template <typename T, typename R, template <typename> class Op>
 pos_t apply_col(pos_t n, R* RES result, T* RES param1)
 /// project with input selection vector and constant and column
 {
-  for (uint64_t i = 0; i < n; ++i) {
-    result[i] = Op<T>()(param1[i]);
-  }
-  return n;
+   for (uint64_t i = 0; i < n; ++i) { result[i] = Op<T>()(param1[i]); }
+   return n;
 }
 
 template <typename T, typename R, template <typename> class Op>
@@ -430,11 +445,11 @@ pos_t hash_sel(pos_t n, pos_t* RES inSel, hash_t* RES result, T* RES input)
 /// compute hash for input column
 {
    for (uint64_t i = 0; i < n; ++i) {
-  //IACA_START
+      // IACA_START
       const auto idx = inSel[i];
       result[i] = Op()(input[idx], seed);
    }
-  //IACA_END
+   // IACA_END
    return n;
 }
 
@@ -458,214 +473,231 @@ pos_t rehash_sel(pos_t n, pos_t* RES inSel, hash_t* RES result, T* RES input)
    return n;
 }
 
-
 template <typename T, typename Op>
 pos_t hash8(pos_t n, hash_t* RES result, T* RES input)
 /// compute hash for input column
 {
-  static_assert(sizeof(T) == 8, "Can only be used for inputs types of size 8");
-  size_t rest = n % 8;
-  Vec8u seeds(seed);
-  for (uint64_t i = 0; i < n - rest; i += 8){
-    Vec8u in(input + i);
-    auto hashes = Op().hashKey(in, seeds);// function call operator overloading is not working ?!
-    _mm512_store_epi64(result + i, hashes);
-  }
-  if(rest){
-    __mmask8 remaining = (1 << rest) - 1;
-    Vec8u in = _mm512_maskz_loadu_epi64(remaining, input + n - rest);
-    auto hashes = Op().hashKey(in, seeds);
-    _mm512_mask_store_epi64(result + n - rest, remaining, hashes);
-  }
-  return n;
+   static_assert(sizeof(T) == 8, "Can only be used for inputs types of size 8");
+   size_t rest = n % 8;
+   Vec8u seeds(seed);
+   for (uint64_t i = 0; i < n - rest; i += 8) {
+      Vec8u in(input + i);
+      auto hashes = Op().hashKey(
+          in, seeds); // function call operator overloading is not working ?!
+      _mm512_store_epi64(result + i, hashes);
+   }
+   if (rest) {
+      __mmask8 remaining = (1 << rest) - 1;
+      Vec8u in = _mm512_maskz_loadu_epi64(remaining, input + n - rest);
+      auto hashes = Op().hashKey(in, seeds);
+      _mm512_mask_store_epi64(result + n - rest, remaining, hashes);
+   }
+   return n;
 }
-
 
 template <typename T, typename Op>
 pos_t hash4(pos_t n, hash_t* RES result, T* RES input)
 /// compute hash for input column
 {
-  static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
-  size_t rest = n % 8;
-  Vec8u seeds(seed);
-  for (uint64_t i = 0; i < n - rest; i += 8){
-    Vec8u in(_mm512_cvtepu32_epi64(_mm256_loadu_si256((const __m256i *)(input + i))));
-    auto hashes = Op().hashKey(in, seeds);// function call operator overloading is not working ?!
-    // _mm512_store_epi64(result + i, hashes);
-    _mm512_mask_storeu_epi64(result + i, ~0, hashes);
-  }
-  if(rest){
-    __mmask16 remaining = (1 << rest) - 1;
-    Vec8u in(_mm512_cvtepu32_epi64(_mm256_maskz_loadu_epi32(remaining, input + n - rest)));
-    auto hashes = Op().hashKey(in, seeds);
-    _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes);
-  }
-  return n;
+   static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
+   size_t rest = n % 8;
+   Vec8u seeds(seed);
+   for (uint64_t i = 0; i < n - rest; i += 8) {
+      Vec8u in(_mm512_cvtepu32_epi64(
+          _mm256_loadu_si256((const __m256i*)(input + i))));
+      auto hashes = Op().hashKey(
+          in, seeds); // function call operator overloading is not working ?!
+      // _mm512_store_epi64(result + i, hashes);
+      _mm512_mask_storeu_epi64(result + i, ~0, hashes);
+   }
+   if (rest) {
+      __mmask16 remaining = (1 << rest) - 1;
+      Vec8u in(_mm512_cvtepu32_epi64(
+          _mm256_maskz_loadu_epi32(remaining, input + n - rest)));
+      auto hashes = Op().hashKey(in, seeds);
+      _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes);
+   }
+   return n;
 }
 
 template <typename T, typename Op>
 pos_t hash4_16(pos_t n, hash_t* RES result, T* RES input)
 /// compute hash for input column
 {
-  static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
-  size_t rest = n % 16;
-  Vec16u seeds(seed);
-  for (uint64_t i = 0; i < n - rest; i += 16){
-    Vec16u in(input + i);
-    auto hashes = Op().hashKey(in, seeds);// function call operator overloading is not working ?!
-    // _mm512_store_epi64(result + i, hashes);
-    _mm512_mask_storeu_epi64(result + i, ~0, hashes);
-  }
-  if(rest){
-    __mmask16 remaining = (1 << rest) - 1;
-    Vec16u in(input + n - rest);
-    auto hashes = Op().hashKey(in, seeds);
-    _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes);
-  }
-  return n;
+   static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
+   size_t rest = n % 16;
+   Vec16u seeds(seed);
+   for (uint64_t i = 0; i < n - rest; i += 16) {
+      Vec16u in(input + i);
+      auto hashes = Op().hashKey(
+          in, seeds); // function call operator overloading is not working ?!
+      // _mm512_store_epi64(result + i, hashes);
+      _mm512_mask_storeu_epi64(result + i, ~0, hashes);
+   }
+   if (rest) {
+      __mmask16 remaining = (1 << rest) - 1;
+      Vec16u in(input + n - rest);
+      auto hashes = Op().hashKey(in, seeds);
+      _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes);
+   }
+   return n;
 }
-
 
 template <typename T, typename Op>
 pos_t rehash4(pos_t n, hash_t* RES result, T* RES input)
 /// compute hash for input column
 {
-  static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
-  size_t rest = n % 8;
-  for (uint64_t i = 0; i < n - rest; i += 8){
-    Vec8u seeds(result + i);
-    Vec8u in(_mm512_cvtepu32_epi64(_mm256_loadu_si256((const __m256i *)(input + i))));
-    auto hashes = Op().hashKey(in, seeds);// function call operator overloading is not working ?!
-    // _mm512_store_epi64(result + i, hashes);
-    _mm512_mask_storeu_epi64(result + i, ~0, hashes);
-  }
-  if(rest){
-    __mmask16 remaining = (1 << rest) - 1;
-    Vec8u seeds = _mm512_maskz_loadu_epi64(remaining, result + n - rest);
-    Vec8u in(_mm512_cvtepu32_epi64(_mm256_maskz_loadu_epi32(remaining, input + n - rest)));
-    auto hashes = Op().hashKey(in, seeds);
-    _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes);
-  }
-  return n;
+   static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
+   size_t rest = n % 8;
+   for (uint64_t i = 0; i < n - rest; i += 8) {
+      Vec8u seeds(result + i);
+      Vec8u in(_mm512_cvtepu32_epi64(
+          _mm256_loadu_si256((const __m256i*)(input + i))));
+      auto hashes = Op().hashKey(
+          in, seeds); // function call operator overloading is not working ?!
+      // _mm512_store_epi64(result + i, hashes);
+      _mm512_mask_storeu_epi64(result + i, ~0, hashes);
+   }
+   if (rest) {
+      __mmask16 remaining = (1 << rest) - 1;
+      Vec8u seeds = _mm512_maskz_loadu_epi64(remaining, result + n - rest);
+      Vec8u in(_mm512_cvtepu32_epi64(
+          _mm256_maskz_loadu_epi32(remaining, input + n - rest)));
+      auto hashes = Op().hashKey(in, seeds);
+      _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes);
+   }
+   return n;
 }
 
 template <typename T, typename Op>
 pos_t rehash4_16(pos_t n, hash_t* RES result, T* RES input)
 /// compute hash for input column
 {
-  static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
-  size_t rest = n % 16;
-  for (uint64_t i = 0; i < n - rest; i += 16){
-    Vec16u seeds(result + i);
-    Vec16u in(input + i);
-    auto hashes = Op().hashKey(in, seeds);// function call operator overloading is not working ?!
-    // _mm512_store_epi64(result + i, hashes);
-    _mm512_mask_storeu_epi64(result + i, ~0, hashes);
-  }
-  if(rest){
-    __mmask16 remaining = (1 << rest) - 1;
-    Vec16u seeds = _mm512_maskz_loadu_epi64(remaining, result + n - rest);
-    Vec16u in(input + n - rest);
-    auto hashes = Op().hashKey(in, seeds);
-    _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes);
-  }
-  return n;
+   static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
+   size_t rest = n % 16;
+   for (uint64_t i = 0; i < n - rest; i += 16) {
+      Vec16u seeds(result + i);
+      Vec16u in(input + i);
+      auto hashes = Op().hashKey(
+          in, seeds); // function call operator overloading is not working ?!
+      // _mm512_store_epi64(result + i, hashes);
+      _mm512_mask_storeu_epi64(result + i, ~0, hashes);
+   }
+   if (rest) {
+      __mmask16 remaining = (1 << rest) - 1;
+      Vec16u seeds = _mm512_maskz_loadu_epi64(remaining, result + n - rest);
+      Vec16u in(input + n - rest);
+      auto hashes = Op().hashKey(in, seeds);
+      _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes);
+   }
+   return n;
 }
 
 template <typename T, typename Op>
 pos_t hash4_sel(pos_t n, pos_t* RES inSel, hash_t* RES result, T* RES input)
 /// compute hash for input column
 {
-  static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
-  size_t rest = n % 8;
-  Vec8u seeds(seed);
-  __mmask16 all = ~0;
-  for (uint64_t i = 0; i < n - rest; i += 8){
-    auto inSels = _mm256_loadu_si256((const __m256i *)(inSel + i));
-    Vec8u in = _mm512_cvtepu32_epi64(_mm256_mmask_i32gather_epi32(inSels, all, inSels, input, 4));
-    auto hashes = Op().hashKey(in, seeds); // function call operator overloading is not working ?!
-    _mm512_mask_storeu_epi64(result + i, all, hashes);
-  }
-  if(rest){
-    __mmask16 remaining = (1 << rest) - 1;
-    auto inSels = _mm256_loadu_si256((const __m256i *)(inSel + n - rest));//ignore mask here?
-    Vec8u in = _mm512_cvtepu32_epi64(_mm256_mmask_i32gather_epi32(inSels, remaining, inSels, input, 4));
-    auto hashes = Op().hashKey(in, seeds);
-    _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes);
-  }
-  return n;
+   static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
+   size_t rest = n % 8;
+   Vec8u seeds(seed);
+   __mmask16 all = ~0;
+   for (uint64_t i = 0; i < n - rest; i += 8) {
+      auto inSels = _mm256_loadu_si256((const __m256i*)(inSel + i));
+      Vec8u in = _mm512_cvtepu32_epi64(
+          _mm256_mmask_i32gather_epi32(inSels, all, inSels, input, 4));
+      auto hashes = Op().hashKey(
+          in, seeds); // function call operator overloading is not working ?!
+      _mm512_mask_storeu_epi64(result + i, all, hashes);
+   }
+   if (rest) {
+      __mmask16 remaining = (1 << rest) - 1;
+      auto inSels = _mm256_loadu_si256(
+          (const __m256i*)(inSel + n - rest)); // ignore mask here?
+      Vec8u in = _mm512_cvtepu32_epi64(
+          _mm256_mmask_i32gather_epi32(inSels, remaining, inSels, input, 4));
+      auto hashes = Op().hashKey(in, seeds);
+      _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes);
+   }
+   return n;
 }
 
 template <typename T, typename Op>
 pos_t hash4_16_sel(pos_t n, pos_t* RES inSel, hash_t* RES result, T* RES input)
 /// compute hash for input column
 {
-  static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
-  size_t rest = n % 16;
-  Vec16u seeds(seed);
-  __mmask16 all = ~0;
-  for (uint64_t i = 0; i < n - rest; i += 16){
-    Vec16u inSels(inSel + i);
-    Vec16u in = _mm512_i32gather_epi32(inSels, input, 4);
-    auto hashes = Op().hashKey(in, seeds);
-    _mm512_mask_storeu_epi64(result + i, all, hashes);
-  }
-  if(rest){
-    __mmask16 remaining = (1 << rest) - 1;
-    Vec16u inSels(inSel + n - rest);
-    Vec16u in = _mm512_mask_i32gather_epi32(inSels, all, inSels, input, 4);
-    auto hashes = Op().hashKey(in, seeds);
-    _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes);
-  }
-  return n;
+   static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
+   size_t rest = n % 16;
+   Vec16u seeds(seed);
+   __mmask16 all = ~0;
+   for (uint64_t i = 0; i < n - rest; i += 16) {
+      Vec16u inSels(inSel + i);
+      Vec16u in = _mm512_i32gather_epi32(inSels, input, 4);
+      auto hashes = Op().hashKey(in, seeds);
+      _mm512_mask_storeu_epi64(result + i, all, hashes);
+   }
+   if (rest) {
+      __mmask16 remaining = (1 << rest) - 1;
+      Vec16u inSels(inSel + n - rest);
+      Vec16u in = _mm512_mask_i32gather_epi32(inSels, all, inSels, input, 4);
+      auto hashes = Op().hashKey(in, seeds);
+      _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes);
+   }
+   return n;
 }
 
 template <typename T, typename Op>
 pos_t rehash4_sel(pos_t n, pos_t* RES inSel, hash_t* RES result, T* RES input)
 /// compute hash for input column
 {
-  static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
-  size_t rest = n % 8;
-  for (uint64_t i = 0; i < n - rest; i += 8){
-    Vec8u seeds(result + i);
-    auto inSels = _mm256_loadu_si256((const __m256i *)(inSel + i));
-    Vec8u in = _mm512_cvtepu32_epi64(_mm256_mmask_i32gather_epi32(inSels, ~0, inSels, input, 4));
-    auto hashes = Op().hashKey(in, seeds); // function call operator overloading is not working ?!
-    _mm512_mask_storeu_epi64(result + i, ~0, hashes); // ??
-  }
-  if(rest){
-    __mmask16 remaining = (1 << rest) - 1;
-    Vec8u seeds = _mm512_maskz_loadu_epi64(remaining, result + n - rest);
-    auto inSels = _mm256_loadu_si256((const __m256i *)(inSel + n - rest));//ignore mask here?
-    Vec8u in = _mm512_cvtepu32_epi64(_mm256_mmask_i32gather_epi32(inSels, remaining, inSels, input, 4));
-    auto hashes = Op().hashKey(in, seeds);
-    _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes); // ??
-  }
-  return n;
+   static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
+   size_t rest = n % 8;
+   for (uint64_t i = 0; i < n - rest; i += 8) {
+      Vec8u seeds(result + i);
+      auto inSels = _mm256_loadu_si256((const __m256i*)(inSel + i));
+      Vec8u in = _mm512_cvtepu32_epi64(
+          _mm256_mmask_i32gather_epi32(inSels, ~0, inSels, input, 4));
+      auto hashes = Op().hashKey(
+          in, seeds); // function call operator overloading is not working ?!
+      _mm512_mask_storeu_epi64(result + i, ~0, hashes); // ??
+   }
+   if (rest) {
+      __mmask16 remaining = (1 << rest) - 1;
+      Vec8u seeds = _mm512_maskz_loadu_epi64(remaining, result + n - rest);
+      auto inSels = _mm256_loadu_si256(
+          (const __m256i*)(inSel + n - rest)); // ignore mask here?
+      Vec8u in = _mm512_cvtepu32_epi64(
+          _mm256_mmask_i32gather_epi32(inSels, remaining, inSels, input, 4));
+      auto hashes = Op().hashKey(in, seeds);
+      _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes); // ??
+   }
+   return n;
 }
 
 template <typename T, typename Op>
-pos_t rehash4_16_sel(pos_t n, pos_t* RES inSel, hash_t* RES result, T* RES input)
+pos_t rehash4_16_sel(pos_t n, pos_t* RES inSel, hash_t* RES result,
+                     T* RES input)
 /// compute hash for input column
 {
-  static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
-  size_t rest = n % 16;
-  for (uint64_t i = 0; i < n - rest; i += 16){
-    Vec16u seeds(result + i);
-    Vec16u inSels(inSel + i);
-    Vec16u in = _mm512_i32gather_epi32(inSels, input, 4);
-    auto hashes = Op().hashKey(in, seeds); // function call operator overloading is not working ?!
-    _mm512_mask_storeu_epi64(result + i, ~0, hashes); // ??
-  }
-  if(rest){
-    __mmask16 remaining = (1 << rest) - 1;
-    Vec16u seeds = _mm512_maskz_loadu_epi64(remaining, result + n - rest);
-    Vec16u inSels(inSel + n - rest);
-    Vec16u in =_mm512_mask_i32gather_epi32(inSels, remaining, inSels, input, 4);
-    auto hashes = Op().hashKey(in, seeds);
-    _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes);
-  }
-  return n;
+   static_assert(sizeof(T) == 4, "Can only be used for inputs types of size 4");
+   size_t rest = n % 16;
+   for (uint64_t i = 0; i < n - rest; i += 16) {
+      Vec16u seeds(result + i);
+      Vec16u inSels(inSel + i);
+      Vec16u in = _mm512_i32gather_epi32(inSels, input, 4);
+      auto hashes = Op().hashKey(
+          in, seeds); // function call operator overloading is not working ?!
+      _mm512_mask_storeu_epi64(result + i, ~0, hashes); // ??
+   }
+   if (rest) {
+      __mmask16 remaining = (1 << rest) - 1;
+      Vec16u seeds = _mm512_maskz_loadu_epi64(remaining, result + n - rest);
+      Vec16u inSels(inSel + n - rest);
+      Vec16u in =
+          _mm512_mask_i32gather_epi32(inSels, remaining, inSels, input, 4);
+      auto hashes = Op().hashKey(in, seeds);
+      _mm512_mask_storeu_epi64(result + n - rest, remaining, hashes);
+   }
+   return n;
 }
 //------------------------------------------------------------------------------
 //--- key equality check for hashjoin
@@ -1079,14 +1111,20 @@ using FPartitionByKeyRow = pos_t (*)(pos_t n, pos_t* sel,
 #define EACH_ARITH(m, c) EACH_ARITH_COMM(m, c) EACH_ARITH_NON_COMM(m, c)
 
 using Char_1 = types::Char<1>;
+using Char_6 = types::Char<6>;
+using Char_7 = types::Char<7>;
+using Char_9 = types::Char<9>;
 using Char_10 = types::Char<10>;
+using Char_12 = types::Char<12>;
+using Char_15 = types::Char<15>;
 using Char_25 = types::Char<25>;
 using Char_55 = types::Char<55>;
 using Varchar_55 = types::Varchar<55>;
 
 /// apply all types as first argument to m, pass c as second arg
 #define EACH_TYPE_BASIC(m, c)                                                  \
-  m(Date, c) m(Char_1, c) m(Char_10, c) m(Char_25, c) m(hash_t, c)
+   m(Date, c) m(Char_1, c) m(Char_6, c) m(Char_7, c) m(Char_9, c)              \
+       m(Char_10, c) m(Char_12, c) m(Char_15, c) m(Char_25, c) m(hash_t, c)
 #define EACH_TYPE_FULL(m, c)                                                   \
    m(int32_t, c) m(int64_t, c) m(int8_t, c) m(int16_t, c)
 #define EACH_TYPE(m, c) EACH_TYPE_BASIC(m, c) EACH_TYPE_FULL(m, c)
@@ -1097,6 +1135,8 @@ using Varchar_55 = types::Varchar<55>;
    extern F3 sel_##op##_##type##_col_##type##_col;
 #define MK_SEL_COLVAL_DECL(type, op)                                           \
    extern F3 sel_##op##_##type##_col_##type##_val;
+#define MK_SEL_COLVALORVAL_DECL(type, op)                                      \
+   extern F4 sel_##op##_##type##_col_##type##_val_or_##type##_val;
 #define MK_SELSEL_COLCOL_DECL(type, op)                                        \
    extern F4 selsel_##op##_##type##_col_##type##_col;
 #define MK_SELSEL_COLVAL_DECL(type, op)                                        \
@@ -1171,8 +1211,9 @@ using Varchar_55 = types::Varchar<55>;
 #define MK_PARTITION_ROW_DECL(type)                                            \
    extern FPartitionByKeyRow partition_by_key_row_##type##_col;
 
-// create forward declarations
+// create declarations
 EACH_COMP(EACH_TYPE, MK_SEL_COLCOL_DECL)
+EACH_COMP(EACH_TYPE, MK_SEL_COLVALORVAL_DECL)
 EACH_COMP(EACH_TYPE, MK_SEL_COLVAL_DECL)
 EACH_COMP(EACH_TYPE, MK_SELSEL_COLCOL_DECL)
 EACH_COMP(EACH_TYPE, MK_SELSEL_COLVAL_DECL)
@@ -1229,7 +1270,6 @@ EACH_TYPE(NIL, MK_PARTITION_DECL);
 EACH_TYPE(NIL, MK_PARTITION_SEL_DECL);
 EACH_TYPE(NIL, MK_PARTITION_ROW_DECL);
 
-
 // Specializations
 #ifdef __AVX512F__
 extern F2 hash8_int64_t_col;
@@ -1253,8 +1293,8 @@ extern F4 selsel_greater_equal_int64_t_col_int64_t_val_avx512;
 extern F4 selsel_less_int64_t_col_int64_t_val_avx512;
 extern F4 selsel_less_equal_int64_t_col_int64_t_val_avx512;
 #endif
-}
-}
+} // namespace primitives
+} // namespace vectorwise
 
 // switch for choosing branching or branch free implementations
 #ifdef BRANCHING

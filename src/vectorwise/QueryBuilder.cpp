@@ -14,7 +14,9 @@ size_t padding(size_t size, size_t align) {
 
 size_t QueryBuilder::nextOpNr() { return opNr++; }
 size_t QueryBuilder::nextOnceNr() { return onceNr++; }
-QueryBuilder::~QueryBuilder() { runtime::this_worker->allocator.setSource(previous); }
+QueryBuilder::~QueryBuilder() {
+   runtime::this_worker->allocator.setSource(previous);
+}
 
 QueryBuilder::ResultBuilder QueryBuilder::Result() {
    auto nr = nextOpNr();
@@ -57,6 +59,15 @@ QueryBuilder::ScanBuilder QueryBuilder::Scan(std::string relation) {
    auto res = scan.get();
    pushOperator(move(scan));
    return {*res, rel};
+}
+
+void QueryBuilder::DebugCounter(std::string message) {
+   struct Counter {
+      size_t counter;
+   };
+   Debug<Counter>(
+       [](size_t n, Counter& c) { c.counter += n; },
+       [message](Counter& c) { cout << message << ": " << c.counter << endl; });
 }
 
 void QueryBuilder::Select(std::unique_ptr<class Expression>&& exp) {
@@ -210,8 +221,8 @@ QueryBuilder::HashJoinBuilder::~HashJoinBuilder() {
    join->ht_entry_size += padding(join->ht_entry_size, 8);
 }
 
-QueryBuilder::HashJoinBuilder QueryBuilder::HashJoin(DS probeMatches,
-                                                     pos_t(Hashjoin::*joinFun)()) {
+QueryBuilder::HashJoinBuilder
+QueryBuilder::HashJoin(DS probeMatches, pos_t (Hashjoin::*joinFun)()) {
    HashJoinBuilder b(*this);
    auto nr = nextOpNr();
    auto& s = operatorState.get<Hashjoin::Shared>(nr);
@@ -402,7 +413,8 @@ QueryBuilder::HashJoinBuilder& QueryBuilder::HashJoinBuilder::addBuildValue(
 }
 
 QueryBuilder::HashJoinBuilder&
-QueryBuilder::HashJoinBuilder::setProbeSelVector(DS sel, pos_t(Hashjoin::*joinFun)()) {
+QueryBuilder::HashJoinBuilder::setProbeSelVector(DS sel,
+                                                 pos_t (Hashjoin::*joinFun)()) {
    if (join->probeHash.ops.size())
       throw runtime_error("Probe selection vector was added when probe keys "
                           "were already present");
@@ -436,12 +448,13 @@ QueryBuilder::HashGroupBuilder QueryBuilder::HashGroup() {
    gr->groupStore.setSource(&runtime::this_worker->allocator);
 
    auto& op = *gr;
-   op.groupHt = make_unique<runtime::HashmapSmall<pos_t, pos_t>>(vecs.getVecSize());
+   op.groupHt =
+       make_unique<runtime::HashmapSmall<pos_t, pos_t>>(vecs.getVecSize());
    // --- set up preAggregation
    auto& local = op.preAggregation;
    local.ht_entry_size = sizeof(runtime::Hashmap::EntryHeader);
    local.groupHashes = static_cast<runtime::Hashmap::hash_t*>(
-                                                              vecs.get(8 /*sizeof(runtime::Hashmap::hash_t)*/));
+       vecs.get(8 /*sizeof(runtime::Hashmap::hash_t)*/));
    local.htMatches = static_cast<runtime::Hashmap::EntryHeader**>(
        vecs.get(sizeof(runtime::Hashmap::EntryHeader*)));
    local.groupsFound = static_cast<pos_t*>(vecs.get(sizeof(pos_t)));

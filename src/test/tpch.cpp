@@ -13,9 +13,9 @@
 using namespace runtime;
 using namespace std;
 
-size_t vectorSize = 1024;
+static size_t vectorSize = 1024;
 
-size_t getThreads(){
+static size_t getThreads(){
   static size_t threads = 0;
   if(threads == 0){
      if (auto v = std::getenv("threads")) threads = atoi(v);
@@ -25,7 +25,7 @@ size_t getThreads(){
   return threads;
 }
 
-void configFromEnv(){
+static void configFromEnv(){
   if (auto v = std::getenv("vectorSize")) vectorSize = atoi(v);
   if (auto v = std::getenv("SIMDhash")) conf.useSimdHash = atoi(v);
   if (auto v = std::getenv("SIMDjoin")) conf.useSimdJoin = atoi(v);
@@ -301,8 +301,8 @@ TEST(TPCH, q18) {
             ASSERT_EQ(sum[i],
                       expected[make_tuple(name[i], custkey[i], orderkey[i],
                                           orderdate[i], totalprice[i])]);
-            found++;
            }
+           found++;
          }
       };
       EXPECT_EQ(found, expected.size());

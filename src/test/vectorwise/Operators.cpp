@@ -15,12 +15,12 @@
 using namespace vectorwise;
 using namespace std;
 
-namespace operatortest{
+namespace operatortest {
 
 struct SelectTest : public TPCH, public Query, public QueryBuilder {
    runtime::GlobalPool pool;
    SelectTest() : Query(), QueryBuilder(TPCH::getDB(), shared) {
-     previous = runtime::this_worker->allocator.setSource(&pool);
+      previous = runtime::this_worker->allocator.setSource(&pool);
    }
 };
 
@@ -79,15 +79,15 @@ struct SimpleJoinBuilder : public Query, public vectorwise::QueryBuilder {
    }
 };
 
-template<typename T>
-void assertAllContained(T* d, size_t n, unordered_multiset<T> expected){
-  for(size_t i = 0; i < n; i++){
-    auto e = expected.find(d[i]);
-    //TODO: message
-    if(e == expected.end()) ASSERT_TRUE(false);
-    expected.erase(e);
-  }
-  ASSERT_EQ(expected.size(), 0ull);
+template <typename T>
+void assertAllContained(T* d, size_t n, unordered_multiset<T> expected) {
+   for (size_t i = 0; i < n; i++) {
+      auto e = expected.find(d[i]);
+      // TODO: message
+      if (e == expected.end()) { ASSERT_TRUE(false); }
+      expected.erase(e);
+   }
+   ASSERT_EQ(expected.size(), 0ull);
 }
 
 TEST(Join, simpleJoin) {
@@ -99,11 +99,11 @@ TEST(Join, simpleJoin) {
        std::vector<int32_t>{101, 103, 104, 108};
    db["probe"].insert("b", make_unique<algebra::Integer>()) =
        std::vector<int32_t>{88, 1, 1, 17, 4, // 1 2 4
-                            1, 2, 3, 4, // 5 7 8
-                            1, 2, 3, 4, // 9 11 12
-                            1, 2, 3, 4, // 13 14 16
-                            1, 2, 3, 4, // 17 19 20
-                            1, 2, 3, 4};// 21 23 24
+                            1,  2, 3, 4,     // 5 7 8
+                            1,  2, 3, 4,     // 9 11 12
+                            1,  2, 3, 4,     // 13 14 16
+                            1,  2, 3, 4,     // 17 19 20
+                            1,  2, 3, 4};    // 21 23 24
    db["build"].nrTuples = 4;
    db["probe"].nrTuples = 25;
 
@@ -114,31 +114,48 @@ TEST(Join, simpleJoin) {
    auto join = dynamic_cast<Hashjoin*>(query->rootOp.get());
    ASSERT_NE(nullptr, join);
    // check if correct elements of probe side were determined
-   assertAllContained(join->probeMatches, n, {1, 2, 4,    //
-         5, 7, 8,    //
-         9, 11, 12,  //
-         13, 15, 16, //
-         17, 19, 20, //
-         21, 23, 24});
+   assertAllContained(join->probeMatches, n,
+                      {1, 2, 4,    //
+                       5, 7, 8,    //
+                       9, 11, 12,  //
+                       13, 15, 16, //
+                       17, 19, 20, //
+                       21, 23, 24});
 
    unordered_multiset<pos_t> vMatches{1, 1, 4, //
-       1, 3, 4, //
-       1, 3, 4, //
-       1, 3, 4, //
-       1, 3, 4, //
-       1, 3, 4};
-   for(size_t i = 0; i < n; i++){
-     auto& el = *addBytes(reinterpret_cast<int32_t*>(join->buildMatches[i++]), sizeof(runtime::Hashmap::EntryHeader));
-     auto e = vMatches.find(el);
-     ASSERT_NE(e, vMatches.end());
+                                      1, 3, 4, //
+                                      1, 3, 4, //
+                                      1, 3, 4, //
+                                      1, 3, 4, //
+                                      1, 3, 4};
+   for (size_t i = 0; i < n; i++) {
+      auto& el = *addBytes(reinterpret_cast<int32_t*>(join->buildMatches[i++]),
+                           sizeof(runtime::Hashmap::EntryHeader));
+      auto e = vMatches.find(el);
+      ASSERT_NE(e, vMatches.end());
    }
    // check if correct build values were gathered
-   assertAllContained(query->r, n, {101, 101, 104,//
-       101, 103, 104,//
-       101, 103, 104,//
-       101, 103, 104,//
-       101, 103, 104,//
-       101, 103, 104,});
+   assertAllContained(query->r, n,
+                      {
+                          101,
+                          101,
+                          104, //
+                          101,
+                          103,
+                          104, //
+                          101,
+                          103,
+                          104, //
+                          101,
+                          103,
+                          104, //
+                          101,
+                          103,
+                          104, //
+                          101,
+                          103,
+                          104,
+                      });
 }
 
 TEST(Join, simpleJoinWithSmallBuffers) {
@@ -194,7 +211,8 @@ TEST(Join, simpleJoinWithResultOverflow) {
    SimpleJoinBuilder b(db, 2);
    auto query = b.getQuery();
    std::unordered_multiset<int32_t> expectedKeys = {1, 1, 1, 1, 1, 4};
-   std::unordered_multiset<int32_t> expectedBuildValues = {101, 101, 101, 101, 101, 104};
+   std::unordered_multiset<int32_t> expectedBuildValues = {101, 101, 101,
+                                                           101, 101, 104};
    size_t found = 0;
 
    vector<int32_t> keys;
@@ -206,9 +224,10 @@ TEST(Join, simpleJoinWithResultOverflow) {
       ASSERT_NE(nullptr, join);
 
       for (unsigned i = 0; i < n; ++i)
-        keys.push_back(*addBytes(reinterpret_cast<int32_t*>(join->buildMatches[i]), sizeof(runtime::Hashmap::EntryHeader)));
-      for (unsigned i = 0; i < n; ++i)
-        vals.push_back(query->r[i]);
+         keys.push_back(
+             *addBytes(reinterpret_cast<int32_t*>(join->buildMatches[i]),
+                       sizeof(runtime::Hashmap::EntryHeader)));
+      for (unsigned i = 0; i < n; ++i) vals.push_back(query->r[i]);
    }
 
    // check if correct keys of build side were found
@@ -216,7 +235,6 @@ TEST(Join, simpleJoinWithResultOverflow) {
    // check if correct build values were gathered
    assertAllContained(vals.data(), vals.size(), expectedBuildValues);
    ASSERT_EQ(expectedKeys.size(), found);
-
 }
 
 struct JoinBuildSelectBuilder : public Query, private vectorwise::QueryBuilder {
@@ -277,10 +295,11 @@ TEST(Join, joinBuildSelection) {
    // check if correct keys of build side were found
 
    unordered_multiset<pos_t> vMatches{4, 44, 44};
-   for(size_t i = 0; i < n; i++){
-     auto& el = *addBytes(reinterpret_cast<int32_t*>(join->buildMatches[i++]), sizeof(runtime::Hashmap::EntryHeader));
-     auto e = vMatches.find(el);
-     ASSERT_NE(e, vMatches.end());
+   for (size_t i = 0; i < n; i++) {
+      auto& el = *addBytes(reinterpret_cast<int32_t*>(join->buildMatches[i++]),
+                           sizeof(runtime::Hashmap::EntryHeader));
+      auto e = vMatches.find(el);
+      ASSERT_NE(e, vMatches.end());
    }
    // check if correct build values were gathered
    assertAllContained(query->r, n, {104, 144, 144});
@@ -322,8 +341,8 @@ TEST(Join, joinProbeSelection) {
    db["build"].insert("k", make_unique<algebra::BigInt>()) =
        std::vector<int64_t>{1, 3, 4, 8};
    db["probe"].insert("b", make_unique<algebra::BigInt>()) =
-       std::vector<int64_t>{88, 8, 1, 1, 17, 4, 3, 3, 3, 3,
-                             3, 3, 3,  3, 3, 3, 3, 3};
+       std::vector<int64_t>{88, 8, 1, 1, 17, 4, 3, 3, 3,
+                            3,  3, 3, 3, 3,  3, 3, 3, 3};
    db["build"].nrTuples = 4;
    db["probe"].nrTuples = 18;
 
@@ -334,13 +353,15 @@ TEST(Join, joinProbeSelection) {
    auto join = dynamic_cast<Hashjoin*>(query->rootOp.get());
    ASSERT_NE(nullptr, join);
    // check if correct elements of probe side were determined
-   assertAllContained(join->probeMatches, n, {2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17});
+   assertAllContained(join->probeMatches, n,
+                      {2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17});
    // check if correct keys of build side were found
    unordered_multiset<pos_t> vMatches{1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3};
-   for(size_t i = 0; i < n; i++){
-     auto& el = *addBytes(reinterpret_cast<int32_t*>(join->buildMatches[i++]), sizeof(runtime::Hashmap::EntryHeader));
-     auto e = vMatches.find(el);
-     ASSERT_NE(e, vMatches.end());
+   for (size_t i = 0; i < n; i++) {
+      auto& el = *addBytes(reinterpret_cast<int32_t*>(join->buildMatches[i++]),
+                           sizeof(runtime::Hashmap::EntryHeader));
+      auto e = vMatches.find(el);
+      ASSERT_NE(e, vMatches.end());
    }
 }
 TEST(Join, joinProbeSelectionAndResultOverflow) {
@@ -382,7 +403,7 @@ class HashGroupT : public ::testing::Test, public Query, public QueryBuilder {
  protected:
    runtime::Database db;
    runtime::GlobalPool pool;
-   HashGroupT() : Query(), QueryBuilder(db, shared){
+   HashGroupT() : Query(), QueryBuilder(db, shared) {
       previous = runtime::this_worker->allocator.setSource(&pool);
    };
 };
@@ -453,7 +474,7 @@ class HashGroupSmallBuf : public ::testing::Test,
  protected:
    runtime::Database db;
    runtime::GlobalPool pool;
-   HashGroupSmallBuf() : Query(), QueryBuilder(db, shared, 2){
+   HashGroupSmallBuf() : Query(), QueryBuilder(db, shared, 2) {
       previous = runtime::this_worker->allocator.setSource(&pool);
    };
 };
@@ -587,4 +608,4 @@ TEST_F(HashGroupSmallBuf, groupWithSel) {
    ASSERT_EQ(found, size_t(5));
 }
 
-}
+} // namespace operatortest

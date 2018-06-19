@@ -103,6 +103,39 @@ class SharedStateManager {
    }
 };
 
+template <typename PAYLOAD> class DebugOperator : public UnaryOperator {
+ public:
+   struct Shared : public SharedState {
+      std::mutex state_mutex;
+      PAYLOAD data;
+   };
+
+   DebugOperator(Shared& shared, std::function<void(size_t, PAYLOAD&)> step,
+                 std::function<void(PAYLOAD&)> finish)
+       : shared_(shared), step_(std::move(step)), finish_(std::move(finish)) {}
+   virtual size_t next() override {
+      auto n = child->next();
+      {
+         std::lock_guard<std::mutex> lock(shared_.state_mutex);
+         step_(n, shared_.data);
+      }
+      return n;
+   }
+
+   virtual ~DebugOperator() override {
+      bool leader = runtime::barrier();
+      if (leader) {
+         std::lock_guard<std::mutex> lock(shared_.state_mutex);
+         finish_(shared_.data);
+      }
+   }
+
+ private:
+   Shared& shared_;
+   std::function<void(size_t, PAYLOAD&)> step_;
+   std::function<void(PAYLOAD&)> finish_;
+};
+
 class Scan : public Operator {
  public:
    struct Shared : public SharedState {
@@ -172,8 +205,9 @@ class Hashjoin : public BinaryOperator {
       IteratorContinuation()
           : nextProbe(0), numProbes(0), buildMatch(runtime::Hashmap::end()) {}
    } cont;
-private:
-  Shared& shared;
+
+ private:
+   Shared& shared;
    /// Additional state to continue iteration in next call for  joinSelParallel
    struct IterConcurrentContinuation {
       pos_t followup = 0;

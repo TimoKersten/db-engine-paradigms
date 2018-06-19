@@ -219,54 +219,74 @@ pos_t Hashjoin::joinAllSIMD() {
 #ifdef __AVX512F__ // if AVX 512 available, use it!
 #if HASH_SIZE == 32
       size_t rest = cont.numProbes % 8;
-      auto ids = _mm512_set_epi32(0,0,0,0,0,0,0,0,7,6,5,4,3,2,1,0);
-      for (size_t i = 0, end = cont.numProbes - rest; i < end; i+=8) {
+      auto ids =
+          _mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0, 7, 6, 5, 4, 3, 2, 1, 0);
+      for (size_t i = 0, end = cont.numProbes - rest; i < end; i += 8) {
 
          // load hashes
          // auto hash = probeHashes[i];
          // Vec8u hashes(probeHashes + i);
-         auto hashDense = _mm256_loadu_si256((const __m256i *)(probeHashes + i));
+         auto hashDense = _mm256_loadu_si256((const __m256i*)(probeHashes + i));
          Vec8u hashes = _mm512_cvtepu32_epi64(hashDense);
          // find entry pointers in ht
          Vec8uM entries = shared.ht.find_chain_tagged(hashes);
          // load entry hashes
          auto entryHashes = _mm512_mask_i64gather_epi32(
-             hashDense , entries.mask,
-             entries.vec + Vec8u(offsetof(decltype(shared.ht)::EntryHeader, hash)),
+             hashDense, entries.mask,
+             entries.vec +
+                 Vec8u(offsetof(decltype(shared.ht)::EntryHeader, hash)),
              nullptr, 1);
          {
-           // Check if hashes match
-           __mmask8 hashesEq =
-             _mm512_mask_cmpeq_epi32_mask(entries.mask, _mm512_castsi256_si512(entryHashes),_mm512_castsi256_si512(hashDense));
-           // write pointers
-           _mm512_mask_compressstoreu_epi64(buildMatches+found, hashesEq, entries.vec);
-           static_assert(sizeof(pos_t) == 4, "SIMD join assumes sizeof(pos_t) is 4"); // change the types for probeSels if this fails
-           // write selection
-           _mm512_mask_compressstoreu_epi32(probeMatches+found, hashesEq, ids);
-           found += __builtin_popcount(hashesEq);
+            // Check if hashes match
+            __mmask8 hashesEq = _mm512_mask_cmpeq_epi32_mask(
+                entries.mask, _mm512_castsi256_si512(entryHashes),
+                _mm512_castsi256_si512(hashDense));
+            // write pointers
+            _mm512_mask_compressstoreu_epi64(buildMatches + found, hashesEq,
+                                             entries.vec);
+            static_assert(sizeof(pos_t) == 4,
+                          "SIMD join assumes sizeof(pos_t) is 4"); // change the
+                                                                   // types for
+                                                                   // probeSels
+                                                                   // if this
+                                                                   // fails
+            // write selection
+            _mm512_mask_compressstoreu_epi32(probeMatches + found, hashesEq,
+                                             ids);
+            found += __builtin_popcount(hashesEq);
          }
 
          {
-           // write continuations
-           static_assert(offsetof(decltype(shared.ht)::EntryHeader, next) == 0, "Hash is expected to be in first position");
-           Vec8u nextPtrs = _mm512_mask_i64gather_epi64(entries.vec, entries.mask, entries.vec, nullptr, 1);
-           __mmask8 hasNext = _mm512_mask_cmpneq_epi64_mask(entries.mask, nextPtrs, Vec8u(uint64_t(shared.ht.end())));
-           if(hasNext){
-             // write pointers
-             _mm512_mask_compressstoreu_epi64(followupEntries+followupWrite, hasNext, nextPtrs);
-             static_assert(sizeof(pos_t) == 4, "SIMD join assumes sizeof(pos_t) is 4"); // change the types for probeSels if this fails
-             // write selection
-             _mm512_mask_compressstoreu_epi32(followupIds+followupWrite, hasNext, ids);
-             followupWrite += __builtin_popcount(hasNext);
-         }
-         ids = _mm512_add_epi32(ids, _mm512_set1_epi32(8));
+            // write continuations
+            static_assert(offsetof(decltype(shared.ht)::EntryHeader, next) == 0,
+                          "Hash is expected to be in first position");
+            Vec8u nextPtrs = _mm512_mask_i64gather_epi64(
+                entries.vec, entries.mask, entries.vec, nullptr, 1);
+            __mmask8 hasNext = _mm512_mask_cmpneq_epi64_mask(
+                entries.mask, nextPtrs, Vec8u(uint64_t(shared.ht.end())));
+            if (hasNext) {
+               // write pointers
+               _mm512_mask_compressstoreu_epi64(followupEntries + followupWrite,
+                                                hasNext, nextPtrs);
+               static_assert(
+                   sizeof(pos_t) == 4,
+                   "SIMD join assumes sizeof(pos_t) is 4"); // change the types
+                                                            // for probeSels if
+                                                            // this fails
+               // write selection
+               _mm512_mask_compressstoreu_epi32(followupIds + followupWrite,
+                                                hasNext, ids);
+               followupWrite += __builtin_popcount(hasNext);
+            }
+            ids = _mm512_add_epi32(ids, _mm512_set1_epi32(8));
          }
       }
 #else
       size_t rest = cont.numProbes % 8;
       // auto ids = _mm256_set_epi32(7,6,5,4,3,2,1,0);
-      auto ids = _mm512_set_epi32(0,0,0,0,0,0,0,0,7,6,5,4,3,2,1,0);
-      for (size_t i = 0, end = cont.numProbes - rest; i < end; i+=8) {
+      auto ids =
+          _mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0, 7, 6, 5, 4, 3, 2, 1, 0);
+      for (size_t i = 0, end = cont.numProbes - rest; i < end; i += 8) {
 
          // load hashes
          // auto hash = probeHashes[i];
@@ -275,56 +295,74 @@ pos_t Hashjoin::joinAllSIMD() {
          Vec8uM entries = shared.ht.find_chain_tagged(hashes);
          // load entry hashes
          Vec8u entryHashes = _mm512_mask_i64gather_epi64(
-             entries.vec , entries.mask,
-             entries.vec + Vec8u(offsetof(decltype(shared.ht)::EntryHeader, hash)),
+             entries.vec, entries.mask,
+             entries.vec +
+                 Vec8u(offsetof(decltype(shared.ht)::EntryHeader, hash)),
              nullptr, 1);
          {
-           // Check if hashes match
-           __mmask8 hashesEq =
-               _mm512_mask_cmpeq_epi64_mask(entries.mask, entryHashes, hashes);
-           // write pointers
-           _mm512_mask_compressstoreu_epi64(buildMatches+found, hashesEq, entries.vec);
-           static_assert(sizeof(pos_t) == 4, "SIMD join assumes sizeof(pos_t) is 4"); // change the types for probeSels if this fails
-           // write selection
-           _mm512_mask_compressstoreu_epi32(probeMatches+found, hashesEq, ids);
-           found += __builtin_popcount(hashesEq);
+            // Check if hashes match
+            __mmask8 hashesEq =
+                _mm512_mask_cmpeq_epi64_mask(entries.mask, entryHashes, hashes);
+            // write pointers
+            _mm512_mask_compressstoreu_epi64(buildMatches + found, hashesEq,
+                                             entries.vec);
+            static_assert(sizeof(pos_t) == 4,
+                          "SIMD join assumes sizeof(pos_t) is 4"); // change the
+                                                                   // types for
+                                                                   // probeSels
+                                                                   // if this
+                                                                   // fails
+            // write selection
+            _mm512_mask_compressstoreu_epi32(probeMatches + found, hashesEq,
+                                             ids);
+            found += __builtin_popcount(hashesEq);
          }
 
          {
-           // write continuations
-           static_assert(offsetof(decltype(shared.ht)::EntryHeader, next) == 0, "Hash is expected to be in first position");
-           Vec8u nextPtrs = _mm512_mask_i64gather_epi64(entries.vec, entries.mask, entries.vec, nullptr, 1);
-           __mmask8 hasNext = _mm512_mask_cmpneq_epi64_mask(entries.mask, nextPtrs, Vec8u(uint64_t(shared.ht.end())));
-           if(hasNext){
-             // write pointers
-             _mm512_mask_compressstoreu_epi64(followupEntries+followupWrite, hasNext, nextPtrs);
-             static_assert(sizeof(pos_t) == 4, "SIMD join assumes sizeof(pos_t) is 4"); // change the types for probeSels if this fails
-             // write selection
-             _mm512_mask_compressstoreu_epi32(followupIds+followupWrite, hasNext, ids);
-             followupWrite += __builtin_popcount(hasNext);
-         }
-         ids = _mm512_add_epi32(ids, _mm512_set1_epi32(8));
+            // write continuations
+            static_assert(offsetof(decltype(shared.ht)::EntryHeader, next) == 0,
+                          "Hash is expected to be in first position");
+            Vec8u nextPtrs = _mm512_mask_i64gather_epi64(
+                entries.vec, entries.mask, entries.vec, nullptr, 1);
+            __mmask8 hasNext = _mm512_mask_cmpneq_epi64_mask(
+                entries.mask, nextPtrs, Vec8u(uint64_t(shared.ht.end())));
+            if (hasNext) {
+               // write pointers
+               _mm512_mask_compressstoreu_epi64(followupEntries + followupWrite,
+                                                hasNext, nextPtrs);
+               static_assert(
+                   sizeof(pos_t) == 4,
+                   "SIMD join assumes sizeof(pos_t) is 4"); // change the types
+                                                            // for probeSels if
+                                                            // this fails
+               // write selection
+               _mm512_mask_compressstoreu_epi32(followupIds + followupWrite,
+                                                hasNext, ids);
+               followupWrite += __builtin_popcount(hasNext);
+            }
+            ids = _mm512_add_epi32(ids, _mm512_set1_epi32(8));
          }
       }
 #endif // hash size
 #else
       const size_t rest = cont.numProbes;
 #endif
-      for (size_t i = cont.numProbes-rest, end = cont.numProbes; i < end; ++i) {
-        auto hash = probeHashes[i];
-        auto entry = shared.ht.find_chain_tagged(hash);
-        if (entry != shared.ht.end()) {
-          if (entry->hash == hash) {
-            buildMatches[found] = entry;
-            probeMatches[found] = i;
-            found += 1;
-          }
-          if (entry->next != shared.ht.end()) {
-            followupIds[followupWrite] = i;
-            followupEntries[followupWrite] = entry->next;
-            followupWrite += 1;
-          }
-        }
+      for (size_t i = cont.numProbes - rest, end = cont.numProbes; i < end;
+           ++i) {
+         auto hash = probeHashes[i];
+         auto entry = shared.ht.find_chain_tagged(hash);
+         if (entry != shared.ht.end()) {
+            if (entry->hash == hash) {
+               buildMatches[found] = entry;
+               probeMatches[found] = i;
+               found += 1;
+            }
+            if (entry->next != shared.ht.end()) {
+               followupIds[followupWrite] = i;
+               followupEntries[followupWrite] = entry->next;
+               followupWrite += 1;
+            }
+         }
       }
    }
 
@@ -473,52 +511,74 @@ pos_t Hashjoin::joinSelSIMD() {
 #ifdef __AVX512F__ // if AVX 512 available, use it!
 #if HASH_SIZE == 32
       size_t rest = cont.numProbes % 8;
-      auto ids = _mm512_set_epi32(0,0,0,0,0,0,0,0,7,6,5,4,3,2,1,0);
-      for (size_t i = 0, end = cont.numProbes - rest; i < end; i+=8) {
+      auto ids =
+          _mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0, 7, 6, 5, 4, 3, 2, 1, 0);
+      for (size_t i = 0, end = cont.numProbes - rest; i < end; i += 8) {
 
          // load hashes
          // auto hash = probeHashes[i];
-         auto hashDense = _mm256_loadu_si256((const __m256i *)(probeHashes + i));
+         auto hashDense = _mm256_loadu_si256((const __m256i*)(probeHashes + i));
          Vec8u hashes = _mm512_cvtepu32_epi64(hashDense);
          // Vec8u hashes(probeHashes + i);
          // find entry pointers in ht
          Vec8uM entries = shared.ht.find_chain_tagged(hashes);
          // load entry hashes
-         Vec8u hashPtrs = entries.vec + Vec8u(offsetof(decltype(shared.ht)::EntryHeader, hash));
-         auto entryHashes = _mm512_mask_i64gather_epi32(hashDense, entries.mask, hashPtrs, nullptr, 1);
+         Vec8u hashPtrs =
+             entries.vec +
+             Vec8u(offsetof(decltype(shared.ht)::EntryHeader, hash));
+         auto entryHashes = _mm512_mask_i64gather_epi32(hashDense, entries.mask,
+                                                        hashPtrs, nullptr, 1);
          {
-           // Check if hashes match
-           __mmask8 hashesEq =
-             _mm512_mask_cmpeq_epi32_mask(entries.mask, _mm512_castsi256_si512(entryHashes),_mm512_castsi256_si512(hashDense));
-           // write pointers
-           _mm512_mask_compressstoreu_epi64(buildMatches+found, hashesEq, entries.vec);
-           static_assert(sizeof(pos_t) == 4, "SIMD join assumes sizeof(pos_t) is 4"); // change the types for probeSels if this fails
-           // write selection
-           __m512i probeSels = _mm512_loadu_si512(probeSel + i);
-           _mm512_mask_compressstoreu_epi32(probeMatches+found, hashesEq, probeSels);
-           found += __builtin_popcount(hashesEq);
+            // Check if hashes match
+            __mmask8 hashesEq = _mm512_mask_cmpeq_epi32_mask(
+                entries.mask, _mm512_castsi256_si512(entryHashes),
+                _mm512_castsi256_si512(hashDense));
+            // write pointers
+            _mm512_mask_compressstoreu_epi64(buildMatches + found, hashesEq,
+                                             entries.vec);
+            static_assert(sizeof(pos_t) == 4,
+                          "SIMD join assumes sizeof(pos_t) is 4"); // change the
+                                                                   // types for
+                                                                   // probeSels
+                                                                   // if this
+                                                                   // fails
+            // write selection
+            __m512i probeSels = _mm512_loadu_si512(probeSel + i);
+            _mm512_mask_compressstoreu_epi32(probeMatches + found, hashesEq,
+                                             probeSels);
+            found += __builtin_popcount(hashesEq);
          }
 
          {
-           // write continuations
-           static_assert(offsetof(decltype(shared.ht)::EntryHeader, next) == 0, "Hash is expected to be in first position");
-           Vec8u nextPtrs = _mm512_mask_i64gather_epi64(entries.vec, entries.mask, entries.vec, nullptr, 1);
-           __mmask8 hasNext = _mm512_mask_cmpneq_epi64_mask(entries.mask, nextPtrs, Vec8u(uint64_t(shared.ht.end())));
-           if(hasNext){
-             // write pointers
-             _mm512_mask_compressstoreu_epi64(followupEntries+followupWrite, hasNext, nextPtrs);
-             static_assert(sizeof(pos_t) == 4, "SIMD join assumes sizeof(pos_t) is 4"); // change the types for probeSels if this fails
-             // write selection
-             _mm512_mask_compressstoreu_epi32(followupIds+followupWrite, hasNext, ids);
-             followupWrite += __builtin_popcount(hasNext);
-         }
-         ids = _mm512_add_epi32(ids, _mm512_set1_epi32(8));
+            // write continuations
+            static_assert(offsetof(decltype(shared.ht)::EntryHeader, next) == 0,
+                          "Hash is expected to be in first position");
+            Vec8u nextPtrs = _mm512_mask_i64gather_epi64(
+                entries.vec, entries.mask, entries.vec, nullptr, 1);
+            __mmask8 hasNext = _mm512_mask_cmpneq_epi64_mask(
+                entries.mask, nextPtrs, Vec8u(uint64_t(shared.ht.end())));
+            if (hasNext) {
+               // write pointers
+               _mm512_mask_compressstoreu_epi64(followupEntries + followupWrite,
+                                                hasNext, nextPtrs);
+               static_assert(
+                   sizeof(pos_t) == 4,
+                   "SIMD join assumes sizeof(pos_t) is 4"); // change the types
+                                                            // for probeSels if
+                                                            // this fails
+               // write selection
+               _mm512_mask_compressstoreu_epi32(followupIds + followupWrite,
+                                                hasNext, ids);
+               followupWrite += __builtin_popcount(hasNext);
+            }
+            ids = _mm512_add_epi32(ids, _mm512_set1_epi32(8));
          }
       }
 #else
       size_t rest = cont.numProbes % 8;
-      auto ids = _mm512_set_epi32(0,0,0,0,0,0,0,0,7,6,5,4,3,2,1,0);
-      for (size_t i = 0, end = cont.numProbes - rest; i < end; i+=8) {
+      auto ids =
+          _mm512_set_epi32(0, 0, 0, 0, 0, 0, 0, 0, 7, 6, 5, 4, 3, 2, 1, 0);
+      for (size_t i = 0, end = cont.numProbes - rest; i < end; i += 8) {
 
          // load hashes
          // auto hash = probeHashes[i];
@@ -526,56 +586,76 @@ pos_t Hashjoin::joinSelSIMD() {
          // find entry pointers in ht
          Vec8uM entries = shared.ht.find_chain_tagged(hashes);
          // load entry hashes
-         Vec8u hashPtrs = entries.vec + Vec8u(offsetof(decltype(shared.ht)::EntryHeader, hash));
-         Vec8u entryHashes = _mm512_mask_i64gather_epi64(hashPtrs, entries.mask, hashPtrs, nullptr, 1);
+         Vec8u hashPtrs =
+             entries.vec +
+             Vec8u(offsetof(decltype(shared.ht)::EntryHeader, hash));
+         Vec8u entryHashes = _mm512_mask_i64gather_epi64(hashPtrs, entries.mask,
+                                                         hashPtrs, nullptr, 1);
          {
-           // Check if hashes match
-           __mmask8 hashesEq =
-               _mm512_mask_cmpeq_epi64_mask(entries.mask, entryHashes, hashes);
-           // write pointers
-           _mm512_mask_compressstoreu_epi64(buildMatches+found, hashesEq, entries.vec);
-           static_assert(sizeof(pos_t) == 4, "SIMD join assumes sizeof(pos_t) is 4"); // change the types for probeSels if this fails
-           // write selection
-           __m512i probeSels = _mm512_loadu_si512(probeSel + i);
-           _mm512_mask_compressstoreu_epi32(probeMatches+found, hashesEq, probeSels);
-           found += __builtin_popcount(hashesEq);
+            // Check if hashes match
+            __mmask8 hashesEq =
+                _mm512_mask_cmpeq_epi64_mask(entries.mask, entryHashes, hashes);
+            // write pointers
+            _mm512_mask_compressstoreu_epi64(buildMatches + found, hashesEq,
+                                             entries.vec);
+            static_assert(sizeof(pos_t) == 4,
+                          "SIMD join assumes sizeof(pos_t) is 4"); // change the
+                                                                   // types for
+                                                                   // probeSels
+                                                                   // if this
+                                                                   // fails
+            // write selection
+            __m512i probeSels = _mm512_loadu_si512(probeSel + i);
+            _mm512_mask_compressstoreu_epi32(probeMatches + found, hashesEq,
+                                             probeSels);
+            found += __builtin_popcount(hashesEq);
          }
 
          {
-           // write continuations
-           static_assert(offsetof(decltype(shared.ht)::EntryHeader, next) == 0, "Hash is expected to be in first position");
-           Vec8u nextPtrs = _mm512_mask_i64gather_epi64(entries.vec, entries.mask, entries.vec, nullptr, 1);
-           __mmask8 hasNext = _mm512_mask_cmpneq_epi64_mask(entries.mask, nextPtrs, Vec8u(uint64_t(shared.ht.end())));
-           if(hasNext){
-             // write pointers
-             _mm512_mask_compressstoreu_epi64(followupEntries+followupWrite, hasNext, nextPtrs);
-             static_assert(sizeof(pos_t) == 4, "SIMD join assumes sizeof(pos_t) is 4"); // change the types for probeSels if this fails
-             // write selection
-             _mm512_mask_compressstoreu_epi32(followupIds+followupWrite, hasNext, ids);
-             followupWrite += __builtin_popcount(hasNext);
-         }
-         ids = _mm512_add_epi32(ids, _mm512_set1_epi32(8));
+            // write continuations
+            static_assert(offsetof(decltype(shared.ht)::EntryHeader, next) == 0,
+                          "Hash is expected to be in first position");
+            Vec8u nextPtrs = _mm512_mask_i64gather_epi64(
+                entries.vec, entries.mask, entries.vec, nullptr, 1);
+            __mmask8 hasNext = _mm512_mask_cmpneq_epi64_mask(
+                entries.mask, nextPtrs, Vec8u(uint64_t(shared.ht.end())));
+            if (hasNext) {
+               // write pointers
+               _mm512_mask_compressstoreu_epi64(followupEntries + followupWrite,
+                                                hasNext, nextPtrs);
+               static_assert(
+                   sizeof(pos_t) == 4,
+                   "SIMD join assumes sizeof(pos_t) is 4"); // change the types
+                                                            // for probeSels if
+                                                            // this fails
+               // write selection
+               _mm512_mask_compressstoreu_epi32(followupIds + followupWrite,
+                                                hasNext, ids);
+               followupWrite += __builtin_popcount(hasNext);
+            }
+            ids = _mm512_add_epi32(ids, _mm512_set1_epi32(8));
          }
       }
 #endif // hash size
 #else
       const size_t rest = cont.numProbes;
 #endif
-      for (size_t i = cont.numProbes-rest, end = cont.numProbes; i < end; ++i) {
-        auto hash = probeHashes[i];
-        auto entry = shared.ht.find_chain_tagged(hash);
-        if (entry != shared.ht.end()) {
-          if (entry->hash == hash) {
-            buildMatches[found] = entry;
-            probeMatches[found] = probeSel[i];
-            found += 1;
-          }
-          if (entry->next != shared.ht.end()) {
-            followupIds[followupWrite] = i;
-            followupEntries[followupWrite] = entry->next;
-            followupWrite += 1;
-          }
-        }
+      for (size_t i = cont.numProbes - rest, end = cont.numProbes; i < end;
+           ++i) {
+         auto hash = probeHashes[i];
+         auto entry = shared.ht.find_chain_tagged(hash);
+         if (entry != shared.ht.end()) {
+            if (entry->hash == hash) {
+               buildMatches[found] = entry;
+               probeMatches[found] = probeSel[i];
+               found += 1;
+            }
+            if (entry->next != shared.ht.end()) {
+               followupIds[followupWrite] = i;
+               followupEntries[followupWrite] = entry->next;
+               followupWrite += 1;
+            }
+         }
       }
    }
 
@@ -616,8 +696,8 @@ pos_t Hashjoin::joinSelSIMD() {
 }
 
 template <typename T, typename HT>
-void INTERPRET_SEPARATE
-insertAllEntries(T& allocations, HT& ht, size_t ht_entry_size) {
+void INTERPRET_SEPARATE insertAllEntries(T& allocations, HT& ht,
+                                         size_t ht_entry_size) {
    for (auto& block : allocations) {
       auto start =
           reinterpret_cast<runtime::Hashmap::EntryHeader*>(block.first);
@@ -628,21 +708,21 @@ insertAllEntries(T& allocations, HT& ht, size_t ht_entry_size) {
 pos_t Hashjoin::joinBoncz() {
    size_t followupWrite = contCon.followupWrite;
    size_t found = 0;
-   if(followupWrite == 0)
-     for (size_t i = 0, end = cont.numProbes; i < end; ++i) {
-       auto hash = probeHashes[i];
-       auto entry = shared.ht.find_chain_tagged(hash);
-       if (entry != shared.ht.end()) {
-         followupIds[followupWrite] = i;
-         followupEntries[followupWrite] = entry;
-         followupWrite += 1;
-       }
-     }
+   if (followupWrite == 0)
+      for (size_t i = 0, end = cont.numProbes; i < end; ++i) {
+         auto hash = probeHashes[i];
+         auto entry = shared.ht.find_chain_tagged(hash);
+         if (entry != shared.ht.end()) {
+            followupIds[followupWrite] = i;
+            followupEntries[followupWrite] = entry;
+            followupWrite += 1;
+         }
+      }
 
-   while(followupWrite > 0){
+   while (followupWrite > 0) {
       size_t e = followupWrite;
       followupWrite = 0;
-      for(size_t j = 0; j < e; j++){
+      for (size_t j = 0; j < e; j++) {
          auto i = followupIds[j];
          auto entry = followupEntries[j];
          // auto hash = probeHashes[i];
@@ -651,11 +731,11 @@ pos_t Hashjoin::joinBoncz() {
          probeMatches[found++] = i;
          // }
          if (entry->next) {
-           followupIds[followupWrite] = i;
-           followupEntries[followupWrite++] = entry->next;
+            followupIds[followupWrite] = i;
+            followupEntries[followupWrite++] = entry->next;
          }
       }
-      if(followupWrite == 0){
+      if (followupWrite == 0) {
          cont.nextProbe = cont.numProbes;
          contCon.followupWrite = followupWrite;
          return found;
@@ -681,7 +761,8 @@ size_t Hashjoin::next() {
          // build hashes
          buildHash.evaluate(n);
          // scatter hash, keys and values into ht entries
-         auto alloc = runtime::this_worker->allocator.allocate(n * ht_entry_size);
+         auto alloc =
+             runtime::this_worker->allocator.allocate(n * ht_entry_size);
          if (!alloc) throw std::runtime_error("malloc failed");
          allocations.push_back(std::make_pair(alloc, n));
          scatterStart = reinterpret_cast<decltype(scatterStart)>(alloc);
@@ -723,8 +804,7 @@ size_t Hashjoin::next() {
    }
 }
 
-Hashjoin::Hashjoin(Shared& sm) : shared(sm) {
-}
+Hashjoin::Hashjoin(Shared& sm) : shared(sm) {}
 
 Hashjoin::~Hashjoin() {
    // for (auto& block : allocations) free(block.first);
@@ -744,8 +824,6 @@ pos_t HashGroup::findGroupsFromPartition(void* data, size_t n) {
    return globalAggregation.findGroups(n, ht);
 }
 
-
-
 size_t HashGroup::next() {
    using header_t = decltype(ht)::EntryHeader;
    if (!cont.consumed) {
@@ -756,7 +834,8 @@ size_t HashGroup::next() {
       auto entry_size = preAggregation.ht_entry_size;
 
       auto flushAndClear = [&]() INTERPRET_SEPARATE {
-         assert(offsetof(header_t, next) + sizeof(header_t::next) == offsetof(header_t, hash));
+         assert(offsetof(header_t, next) + sizeof(header_t::next) ==
+                offsetof(header_t, hash));
          // flush ht entries into spillStorage
          for (auto& alloc : preAggregation.allocations) {
             for (auto entry = reinterpret_cast<header_t*>(alloc.first),
@@ -797,14 +876,16 @@ size_t HashGroup::next() {
                auto elementSize = threadPartitions.second.entrySize;
                auto nPart = partition.size(chunk, elementSize);
                for (size_t n = std::min(nPart, vecSize), pos = 0; n;
-                    nPart -= n, pos+= n, n = std::min(nPart, vecSize)) {
+                    nPart -= n, pos += n, n = std::min(nPart, vecSize)) {
 
                   // communicate data position of current chunk to primitives
                   // for group lookup and creation
                   auto data = addBytes(chunk->data<void>(), pos * elementSize);
                   globalAggregation.rowData = data;
                   findGroupsFromPartition(data, n);
-                  auto cGroups = [&]() INTERPRET_SEPARATE{globalAggregation.createMissingGroups(ht, true);};
+                  auto cGroups = [&]() INTERPRET_SEPARATE {
+                     globalAggregation.createMissingGroups(ht, true);
+                  };
                   cGroups();
                   updateGroupsFromPartition.evaluate(n);
                }
